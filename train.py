@@ -33,7 +33,7 @@ VAL_PATH = "dataset/val/"
 TEST_PATH = "dataset/test/"
 CATEGORY_PATH = "dataset/category_id.txt"
 
-BATCH_SIZE = 8
+BATCH_SIZE = 32
 MODEL = "densenet201"
 CHECKPOINT_PATH = "checkpoints/" + MODEL + ".h5"
 FIGURE_PATH = "figures/" + MODEL + ".png"
@@ -86,7 +86,7 @@ def get_preprocessing(preprocessing_fn):
 
 def compile_model():
     if not os.path.exists(CHECKPOINT_PATH):
-        model = Unet(MODEL, classes=len(get_classes()) + 1, activation="softmax", encoder_weights="imagenet")
+        model = Unet(MODEL, classes=len(get_classes()[0]) + 1, activation="softmax", encoder_weights="imagenet")
         optimizer = Adam(learning_rate=0.00001)
         model.compile(loss=CategoricalFocalLoss(), optimizer=optimizer, metrics=[IOUScore(threshold=0.5),
                                                                                  FScore(threshold=0.5)])
@@ -122,7 +122,7 @@ def train():
     model, early_stopping, checkpoint, lr, csv_logger = compile_model()
     history = model.fit_generator(train_dataloader,
                                   steps_per_epoch=len(train_dataloader),
-                                  epochs=1,
+                                  epochs=300,
                                   callbacks=[early_stopping, checkpoint, lr, csv_logger],
                                   validation_data=val_dataloader,
                                   validation_steps=len(val_dataloader))
