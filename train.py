@@ -1,216 +1,178 @@
-# https://github.com/divamgupta/image-segmentation-keras
-# https://github.com/divamgupta/image-segmentation-keras/issues/284
-# https://blog.csdn.net/u012897374/article/details/80142744
+# https://github.com/qubvel/segmentation_models
+# https://github.com/qubvel/segmentation_models/issues/88
+# https://github.com/qubvel/segmentation_models/issues/374
+# https://github.com/qubvel/segmentation_models/blob/master/examples/multiclass%20segmentation%20(camvid).ipynb
 
 import os
-import shutil
+import pandas as pd
+import albumentations as A
 import matplotlib.pyplot as plt
+import segmentation_models as sm
 
-from keras.metrics import MeanIoU
-from keras.metrics import Accuracy
+from dataset import show
+from dataset import Dataset
+from dataset import visualize
+from dataset import Dataloader
 from keras.optimizers import Adam
 from keras.models import load_model
 from keras.callbacks import CSVLogger
 from keras.callbacks import EarlyStopping
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import ReduceLROnPlateau
-from keras.preprocessing.image import ImageDataGenerator
-from keras_segmentation.models.fcn import fcn_32_resnet50
-from imgaug import augmenters as iaa
+from segmentation_models.losses import CategoricalFocalLoss
+from segmentation_models.metrics import IOUScore
+from segmentation_models.metrics import FScore
+from segmentation_models import Linknet
+from segmentation_models import PSPNet
+from segmentation_models import Unet
+from segmentation_models import FPN
 
 
 TRAIN_PATH = "dataset/train/"
 VAL_PATH = "dataset/val/"
 TEST_PATH = "dataset/test/"
-AUGMENTED_PATH = "augmented/"
-AUGMENTED_TRAIN_PATH = "augmented/train/"
-AUGMENTED_VAL_PATH = "augmented/val/"
-AUGMENTED_TEST_PATH = "augmented/test/"
+CATEGORY_PATH = "dataset/category_id.txt"
 
-BATCH_SIZE = 32
-NUM_CLASSES = 103
-MODEL = "fcn_32_resnet50"
+BATCH_SIZE = 8
+MODEL = "densenet201"
 CHECKPOINT_PATH = "checkpoints/" + MODEL + ".h5"
 FIGURE_PATH = "figures/" + MODEL + ".png"
 MODEL_PATH = "models/" + MODEL + ".h5"
 LOG_PATH = "logs/" + MODEL + ".log"
-TMP_PATH = "tmp/" + MODEL
 
 
-def show_food(name):
-    original_image = TRAIN_PATH + "/img/" + name + ".jpg"
-    label_image_semantic = TRAIN_PATH + "/mask/" + name + ".png"
-    plt.figure(figsize=(15, 5))
-    plt.subplot(1, 2, 1)
-    img = plt.imread(original_image)
-    plt.title(name)
-    plt.imshow(img, cmap="gray")
-    plt.axis("off")
-    plt.subplot(1, 2, 2)
-    img = plt.imread(label_image_semantic)
-    plt.title(name)
-    plt.imshow(img, cmap="gray")
-    plt.axis("off")
-    plt.tight_layout()
-    plt.show()
+def get_classes():
+    categories = pd.read_csv(CATEGORY_PATH, sep="\t", names=["id", "name"])
+    ids = categories["id"].to_list()[1:]
+    classes = categories["name"].to_list()[1:]
+    return ids, classes
 
 
-def run_data_augmentation():
-    if os.path.isdir(AUGMENTED_PATH):
-        shutil.rmtree(AUGMENTED_PATH)
-    os.makedirs(AUGMENTED_PATH)
-    os.makedirs(AUGMENTED_TRAIN_PATH)
-    os.makedirs(AUGMENTED_TRAIN_PATH + "img/")
-    os.makedirs(AUGMENTED_TRAIN_PATH + "mask/")
-    os.makedirs(AUGMENTED_VAL_PATH)
-    os.makedirs(AUGMENTED_VAL_PATH + "img/")
-    os.makedirs(AUGMENTED_VAL_PATH + "mask/")
-    os.makedirs(AUGMENTED_TEST_PATH)
-    os.makedirs(AUGMENTED_TEST_PATH + "img/")
-    os.makedirs(AUGMENTED_TEST_PATH + "mask/")
-    datagen_args = dict(rescale=1 / 255,
-                        shear_range=0.2,
-                        zoom_range=0.2,
-                        horizontal_flip=True,
-                        vertical_flip=True,
-                        width_shift_range=0.2,
-                        height_shift_range=0.2,
-                        rotation_range=20,
-                        fill_mode="nearest")
-    train_img_datagen = ImageDataGenerator(**datagen_args)
-    train_mask_datagen = ImageDataGenerator(**datagen_args)
-    val_test_datagen = ImageDataGenerator(rescale=1 / 255)
-
-    seed = 42
-    i = 0
-    for batch in train_img_datagen.flow_from_directory(TRAIN_PATH,
-                                                       classes=["img"],
-                                                       save_to_dir=AUGMENTED_TRAIN_PATH + "img",
-                                                       batch_size=BATCH_SIZE,
-                                                       class_mode=None,
-                                                       seed=seed):
-        i += 1
-    print("Train img augmented size: " + str(i))
-    i = 0
-    for batch in train_mask_datagen.flow_from_directory(TRAIN_PATH,
-                                                        classes=["mask"],
-                                                        save_to_dir=AUGMENTED_TRAIN_PATH + "mask",
-                                                        batch_size=BATCH_SIZE,
-                                                        class_mode=None,
-                                                        seed=seed):
-        i += 1
-    print("Train mask augmented size: " + str(i))
-    i = 0
-    for batch in val_test_datagen.flow_from_directory(VAL_PATH,
-                                                      classes=["img"],
-                                                      save_to_dir=AUGMENTED_VAL_PATH + "img",
-                                                      batch_size=BATCH_SIZE,
-                                                      class_mode=None,
-                                                      seed=seed):
-        i += 1
-    print("Validation img augmented size: " + str(i))
-    for batch in val_test_datagen.flow_from_directory(VAL_PATH,
-                                                      classes=["mask"],
-                                                      save_to_dir=AUGMENTED_VAL_PATH + "mask",
-                                                      batch_size=BATCH_SIZE,
-                                                      class_mode=None,
-                                                      seed=seed):
-        i += 1
-    print("Validation img augmented size: " + str(i))
-    for batch in val_test_datagen.flow_from_directory(TEST_PATH,
-                                                      classes=["img"],
-                                                      save_to_dir=AUGMENTED_TEST_PATH + "img",
-                                                      batch_size=BATCH_SIZE,
-                                                      class_mode=None,
-                                                      seed=seed):
-        i += 1
-    print("Test img augmented size: " + str(i))
-    for batch in val_test_datagen.flow_from_directory(TEST_PATH,
-                                                      classes=["mask"],
-                                                      save_to_dir=AUGMENTED_TEST_PATH + "mask",
-                                                      batch_size=BATCH_SIZE,
-                                                      class_mode=None,
-                                                      seed=seed):
-        i += 1
-    print("Test img augmented size: " + str(i))
+def round_clip_0_1(x, **kwargs):
+    return x.round().clip(0, 1)
 
 
-def custom_augmentation():
-    return iaa.Sequential([
-            iaa.Fliplr(0.2),
-            iaa.Flipud(0.2),
-            iaa.Sometimes(0.2, iaa.Crop(percent=(0, 0.2))),
-            iaa.Sometimes(0.2, iaa.LinearContrast((0.75, 1.5))),
-            iaa.Sometimes(0.2, iaa.AverageBlur(k=(2, 7))),
-            iaa.Sometimes(0.2, iaa.CoarseDropout(0.1, size_percent=0.1))
-        ], random_order=True)
+def get_training_augmentation():
+    train_transform = [
+        A.HorizontalFlip(p=0.5),
+        A.ShiftScaleRotate(scale_limit=0.5, rotate_limit=0, shift_limit=0.1, p=1, border_mode=0),
+        A.PadIfNeeded(min_height=320, min_width=320, always_apply=True, border_mode=0),
+        A.RandomCrop(height=320, width=320, always_apply=True),
+        A.GaussNoise(p=0.2),
+        A.Perspective(p=0.5),
+        A.OneOf([A.CLAHE(p=1),
+                 A.RandomBrightnessContrast(p=1),
+                 A.RandomGamma(p=1)], p=0.9),
+        A.OneOf([A.Sharpen(p=1),
+                 A.Blur(blur_limit=3, p=1),
+                 A.MotionBlur(blur_limit=3, p=1)], p=0.9),
+        A.OneOf([A.RandomBrightnessContrast(p=1),
+                 A.HueSaturationValue(p=1)], p=0.9),
+        A.Lambda(mask=round_clip_0_1)
+    ]
+    return A.Compose(train_transform)
+
+
+def get_val_test_augmentation():
+    """Add paddings to make image shape divisible by 32"""
+    test_transform = [A.PadIfNeeded(384, 480)]
+    return A.Compose(test_transform)
+
+
+def get_preprocessing(preprocessing_fn):
+    _transform = [A.Lambda(image=preprocessing_fn)]
+    return A.Compose(_transform)
 
 
 def compile_model():
     if not os.path.exists(CHECKPOINT_PATH):
-        model = fcn_32_resnet50(n_classes=NUM_CLASSES)
+        model = Unet(MODEL, classes=len(get_classes()) + 1, activation="softmax", encoder_weights="imagenet")
         optimizer = Adam(learning_rate=0.00001)
-        model.compile(loss="sparse_categorical_crossentropy", optimizer=optimizer, metrics=[
-            Accuracy(), MeanIoU(num_classes=NUM_CLASSES)])
+        model.compile(loss=CategoricalFocalLoss(), optimizer=optimizer, metrics=[IOUScore(threshold=0.5),
+                                                                                 FScore(threshold=0.5)])
     else:
         model = load_model(CHECKPOINT_PATH)
         print("Checkpoint Model Loaded")
-    early_stopping = EarlyStopping(monitor="val_accuracy", mode="max", patience=10, restore_best_weights=True)
-    checkpoint = ModelCheckpoint(CHECKPOINT_PATH, monitor="val_accuracy", save_best_only=True,
+    early_stopping = EarlyStopping(monitor="val_iou_score", mode="max", patience=10, restore_best_weights=True)
+    checkpoint = ModelCheckpoint(CHECKPOINT_PATH, monitor="val_iou_score", save_best_only=True,
                                  verbose=1, save_weights_only=False)
-    lr = ReduceLROnPlateau(monitor="val_accuracy", mode="max", patience=10)
+    lr = ReduceLROnPlateau(monitor="val_iou_score", mode="max", patience=10)
     csv_logger = CSVLogger(LOG_PATH)
     print(model.summary())
     return model, early_stopping, checkpoint, lr, csv_logger
 
 
 def train():
-    if not os.path.exists(TMP_PATH):
-        os.makedirs(TMP_PATH)
+    preprocess_input = sm.get_preprocessing(MODEL)
+    ids, classes = get_classes()
+    train_dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=ids,
+                            augmentation=get_training_augmentation(),
+                            preprocessing=get_preprocessing(preprocess_input))
+    val_dataset = Dataset(VAL_PATH + "img", VAL_PATH + "mask", class_values=ids,
+                          augmentation=get_val_test_augmentation(),
+                          preprocessing=get_preprocessing(preprocess_input))
+    test_dataset = Dataset(TEST_PATH + "img", TEST_PATH + "mask", class_values=ids,
+                           augmentation=get_val_test_augmentation(),
+                           preprocessing=get_preprocessing(preprocess_input))
+    train_dataloader = Dataloader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    val_dataloader = Dataloader(val_dataset, batch_size=1, shuffle=False)
+    test_dataloader = Dataloader(test_dataset, batch_size=1, shuffle=False)
+    print(train_dataloader[0][0].shape)
+    print(train_dataloader[0][1].shape)
     model, early_stopping, checkpoint, lr, csv_logger = compile_model()
-    history = model.train(train_images=TRAIN_PATH + "img/",
-                          train_annotations=TRAIN_PATH + "mask/",
-                          val_images=VAL_PATH + "img/",
-                          val_annotations=VAL_PATH + "mask/",
-                          checkpoints_path=TMP_PATH,
-                          optimizer_name="adam",
-                          epochs=300,
-                          do_augment=True,
-                          custom_augmentation=custom_augmentation,
-                          callbacks=[early_stopping, checkpoint, lr, csv_logger],
-                          batch_size=BATCH_SIZE)
+    history = model.fit_generator(train_dataloader,
+                                  steps_per_epoch=len(train_dataloader),
+                                  epochs=1,
+                                  callbacks=[early_stopping, checkpoint, lr, csv_logger],
+                                  validation_data=val_dataloader,
+                                  validation_steps=len(val_dataloader))
 
-    print(("=" * 10) + " Train Evaluation " + ("=" * 10))
-    print(model.evaluate_segmentation(inp_images_dir=TRAIN_PATH + "img/",
-                                      annotations_dir=TRAIN_PATH + "mask/"))
+    train_score = model.evaluate_generator(train_dataloader)
+    print("Train Loss: ", train_score[0])
+    print("Train Mean IoU: ", train_score[1])
+    print("Train Mean F1: ", train_score[2])
 
-    print(("=" * 10) + " Validation Evaluation " + ("=" * 10))
-    print(model.evaluate_segmentation(inp_images_dir=VAL_PATH + "img/",
-                                      annotations_dir=VAL_PATH + "mask/"))
+    val_score = model.evaluate_generator(val_dataloader)
+    print("Validation Loss: ", val_score[0])
+    print("Validation Mean IoU: ", val_score[1])
+    print("Validation Mean F1: ", val_score[2])
 
-    print(("=" * 10) + " Test Evaluation " + ("=" * 10))
-    print(model.evaluate_segmentation(inp_images_dir=TEST_PATH + "img/",
-                                      annotations_dir=TEST_PATH + "mask/"))
+    test_score = model.evaluate_generator(test_dataloader)
+    print("Test Loss: ", test_score[0])
+    print("Test Mean IoU: ", test_score[1])
+    print("Test Mean F1: ", test_score[2])
 
     model.save(MODEL_PATH)
 
     plt.figure(figsize=(12, 8))
     plt.title("EVALUATION")
     plt.subplot(2, 2, 1)
+    plt.plot(history.history["iou_score"], label="IoU")
+    plt.plot(history.history["val_iou_score"], label="Val_IoU")
+    plt.legend()
+    plt.title("IoU Evaluation")
+    plt.subplot(2, 2, 2)
     plt.plot(history.history["loss"], label="Loss")
     plt.plot(history.history["val_loss"], label="Val_Loss")
     plt.legend()
     plt.title("Loss Evaluation")
-    plt.subplot(2, 2, 2)
-    plt.plot(history.history["accuracy"], label="Accuracy")
-    plt.plot(history.history["val_accuracy"], label="Val_Accuracy")
-    plt.legend()
-    plt.title("Accuracy Evaluation")
     # plt.show()
     plt.savefig(FIGURE_PATH)
 
 
 if __name__ == '__main__':
-    # show_food("1")
-    # run_data_augmentation()
+    # show(TRAIN_PATH + "img/00000001.png", TRAIN_PATH + "mask/00000001.png")
+    # dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=get_classes()[0])
+    # dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=get_classes()[0],
+    #                   augmentation=get_training_augmentation())
+    # preprocess_input = sm.get_preprocessing(MODEL)
+    # dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=get_classes()[0],
+    #                   augmentation=get_training_augmentation(),
+    #                   preprocessing=get_preprocessing(preprocess_input))
+    # image, mask = dataset[0]
+    # visualize(image=image,
+    #           rice_mask=mask[..., 0].squeeze(),
+    #           jiaozi_mask=mask[..., 41].squeeze(),
+    #           beverage_mask=mask[..., 101].squeeze(),
+    #           background_mask=mask[..., 102].squeeze())
     train()

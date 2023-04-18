@@ -12,7 +12,7 @@ cache/
 mlruns/
 
 # data
-UECFoodPixComplete/
+FoodSeg103.zip
+FoodSeg103/
+dataset.zip
 dataset/
-augmented/
-tmp/
