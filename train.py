@@ -4,6 +4,7 @@
 # https://github.com/qubvel/segmentation_models/blob/master/examples/multiclass%20segmentation%20(camvid).ipynb
 
 import os
+import numpy as np
 import pandas as pd
 import albumentations as A
 import matplotlib.pyplot as plt
@@ -19,6 +20,7 @@ from keras.callbacks import CSVLogger
 from keras.callbacks import EarlyStopping
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import ReduceLROnPlateau
+from segmentation_models.losses import DiceLoss
 from segmentation_models.losses import CategoricalFocalLoss
 from segmentation_models.metrics import IOUScore
 from segmentation_models.metrics import FScore
@@ -28,13 +30,13 @@ from segmentation_models import Unet
 from segmentation_models import FPN
 
 
+CATEGORY_PATH = "dataset/category_id.txt"
 TRAIN_PATH = "dataset/train/"
 VAL_PATH = "dataset/val/"
 TEST_PATH = "dataset/test/"
-CATEGORY_PATH = "dataset/category_id.txt"
 
-BATCH_SIZE = 32
-MODEL = "densenet201"
+BATCH_SIZE = 8
+MODEL = "efficientnetb3"
 CHECKPOINT_PATH = "checkpoints/" + MODEL + ".h5"
 FIGURE_PATH = "figures/" + MODEL + ".png"
 MODEL_PATH = "models/" + MODEL + ".h5"
@@ -43,8 +45,8 @@ LOG_PATH = "logs/" + MODEL + ".log"
 
 def get_classes():
     categories = pd.read_csv(CATEGORY_PATH, sep="\t", names=["id", "name"])
-    ids = categories["id"].to_list()[1:]
-    classes = categories["name"].to_list()[1:]
+    ids = categories["id"].to_list()
+    classes = categories["name"].to_list()
     return ids, classes
 
 
@@ -85,18 +87,27 @@ def get_preprocessing(preprocessing_fn):
 
 
 def compile_model():
+    dice_loss = DiceLoss(class_weights=np.append(np.ones(12), 0.2))
+    focal_loss = CategoricalFocalLoss()
+    total_loss = dice_loss + (1 * focal_loss)
+    iou_score = IOUScore(threshold=0.5)
+    f1_score = FScore(threshold=0.5)
     if not os.path.exists(CHECKPOINT_PATH):
         model = Unet(MODEL, classes=len(get_classes()[0]) + 1, activation="softmax", encoder_weights="imagenet")
         optimizer = Adam(learning_rate=0.00001)
-        model.compile(loss=CategoricalFocalLoss(), optimizer=optimizer, metrics=[IOUScore(threshold=0.5),
-                                                                                 FScore(threshold=0.5)])
+        model.compile(loss=total_loss, optimizer=optimizer, metrics=[iou_score, f1_score])
     else:
-        model = load_model(CHECKPOINT_PATH)
+        custom_objects = {
+            "iou_score": iou_score,
+            "f1-score": f1_score,
+            "dice_loss_plus_1focal_loss": total_loss
+        }
+        model = load_model(CHECKPOINT_PATH, custom_objects=custom_objects)
         print("Checkpoint Model Loaded")
-    early_stopping = EarlyStopping(monitor="val_iou_score", mode="max", patience=10, restore_best_weights=True)
-    checkpoint = ModelCheckpoint(CHECKPOINT_PATH, monitor="val_iou_score", save_best_only=True,
+    early_stopping = EarlyStopping(monitor="val_loss", mode="min", patience=10, restore_best_weights=True)
+    checkpoint = ModelCheckpoint(CHECKPOINT_PATH, monitor="val_loss", save_best_only=True,
                                  verbose=1, save_weights_only=False)
-    lr = ReduceLROnPlateau(monitor="val_iou_score", mode="max", patience=10)
+    lr = ReduceLROnPlateau(monitor="val_loss", mode="min", patience=10)
     csv_logger = CSVLogger(LOG_PATH)
     print(model.summary())
     return model, early_stopping, checkpoint, lr, csv_logger
@@ -120,12 +131,12 @@ def train():
     print(train_dataloader[0][0].shape)
     print(train_dataloader[0][1].shape)
     model, early_stopping, checkpoint, lr, csv_logger = compile_model()
-    history = model.fit_generator(train_dataloader,
-                                  steps_per_epoch=len(train_dataloader),
-                                  epochs=300,
-                                  callbacks=[early_stopping, checkpoint, lr, csv_logger],
-                                  validation_data=val_dataloader,
-                                  validation_steps=len(val_dataloader))
+    history = model.fit(train_dataloader,
+                        steps_per_epoch=len(train_dataloader),
+                        epochs=300,
+                        callbacks=[early_stopping, checkpoint, lr, csv_logger],
+                        validation_data=val_dataloader,
+                        validation_steps=len(val_dataloader))
 
     train_score = model.evaluate_generator(train_dataloader)
     print("Train Loss: ", train_score[0])
@@ -171,8 +182,8 @@ if __name__ == '__main__':
     #                   preprocessing=get_preprocessing(preprocess_input))
     # image, mask = dataset[0]
     # visualize(image=image,
-    #           rice_mask=mask[..., 0].squeeze(),
-    #           jiaozi_mask=mask[..., 41].squeeze(),
-    #           beverage_mask=mask[..., 101].squeeze(),
-    #           background_mask=mask[..., 102].squeeze())
+    #           sky_mask=mask[..., 0].squeeze(),
+    #           car_mask=mask[..., 8].squeeze(),
+    #           pedestrian_mask=mask[..., 9].squeeze(),
+    #           unlabelled_mask=mask[..., 11].squeeze())
     train()
