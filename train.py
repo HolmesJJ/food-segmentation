@@ -6,6 +6,7 @@
 import os
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 import albumentations as A
 import matplotlib.pyplot as plt
 import segmentation_models as sm
@@ -87,22 +88,25 @@ def get_preprocessing(preprocessing_fn):
 
 
 def compile_model():
-    dice_loss = DiceLoss(class_weights=np.append(np.ones(12), 0.2))
+    dice_loss = DiceLoss(class_weights=np.append(np.ones(len(get_classes()[0])), 0.2))
     focal_loss = CategoricalFocalLoss()
     total_loss = dice_loss + (1 * focal_loss)
     iou_score = IOUScore(threshold=0.5)
     f1_score = FScore(threshold=0.5)
+    strategy = tf.distribute.MirroredStrategy()
     if not os.path.exists(CHECKPOINT_PATH):
-        model = Unet(MODEL, classes=len(get_classes()[0]) + 1, activation="softmax", encoder_weights="imagenet")
-        optimizer = Adam(learning_rate=0.00001)
-        model.compile(loss=total_loss, optimizer=optimizer, metrics=[iou_score, f1_score])
+        with strategy.scope():
+            model = Unet(MODEL, classes=len(get_classes()[0]) + 1, activation="softmax", encoder_weights="imagenet")
+            optimizer = Adam(learning_rate=0.00001)
+            model.compile(loss=total_loss, optimizer=optimizer, metrics=[iou_score, f1_score])
     else:
         custom_objects = {
             "iou_score": iou_score,
             "f1-score": f1_score,
             "dice_loss_plus_1focal_loss": total_loss
         }
-        model = load_model(CHECKPOINT_PATH, custom_objects=custom_objects)
+        with strategy.scope():
+            model = load_model(CHECKPOINT_PATH, custom_objects=custom_objects)
         print("Checkpoint Model Loaded")
     early_stopping = EarlyStopping(monitor="val_loss", mode="min", patience=10, restore_best_weights=True)
     checkpoint = ModelCheckpoint(CHECKPOINT_PATH, monitor="val_loss", save_best_only=True,
@@ -186,4 +190,5 @@ if __name__ == '__main__':
     #           car_mask=mask[..., 8].squeeze(),
     #           pedestrian_mask=mask[..., 9].squeeze(),
     #           unlabelled_mask=mask[..., 11].squeeze())
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     train()
