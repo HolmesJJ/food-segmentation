@@ -37,7 +37,7 @@ VAL_PATH = "dataset/val/"
 TEST_PATH = "dataset/test/"
 
 BATCH_SIZE = 8
-MODEL = "efficientnetb3"
+MODEL = "unet-densenet201"
 CHECKPOINT_PATH = "checkpoints/" + MODEL + ".h5"
 FIGURE_PATH = "figures/" + MODEL + ".png"
 MODEL_PATH = "models/" + MODEL + ".h5"
@@ -46,8 +46,12 @@ LOG_PATH = "logs/" + MODEL + ".log"
 
 def get_classes():
     categories = pd.read_csv(CATEGORY_PATH, sep="\t", names=["id", "name"])
-    ids = categories["id"].to_list()
-    classes = categories["name"].to_list()
+    # CamVid Dataset
+    # ids = categories["id"].to_list()[:-1]
+    # classes = categories["name"].to_list()[:-1]
+    # FoodSeg103 Dataset
+    ids = categories["id"].to_list()[1:]
+    classes = categories["name"].to_list()[1:]
     return ids, classes
 
 
@@ -96,7 +100,8 @@ def compile_model():
     strategy = tf.distribute.MirroredStrategy()
     if not os.path.exists(CHECKPOINT_PATH):
         with strategy.scope():
-            model = Unet(MODEL, classes=len(get_classes()[0]) + 1, activation="softmax", encoder_weights="imagenet")
+            model = Unet(MODEL.split("-")[1], classes=len(get_classes()[0]) + 1,
+                         activation="softmax", encoder_weights="imagenet")
             optimizer = Adam(learning_rate=0.00001)
             model.compile(loss=total_loss, optimizer=optimizer, metrics=[iou_score, f1_score])
     else:
@@ -118,7 +123,7 @@ def compile_model():
 
 
 def train():
-    preprocess_input = sm.get_preprocessing(MODEL)
+    preprocess_input = sm.get_preprocessing(MODEL.split("-")[1])
     ids, classes = get_classes()
     train_dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=ids,
                             augmentation=get_training_augmentation(),
@@ -180,7 +185,7 @@ if __name__ == '__main__':
     # dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=get_classes()[0])
     # dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=get_classes()[0],
     #                   augmentation=get_training_augmentation())
-    # preprocess_input = sm.get_preprocessing(MODEL)
+    # preprocess_input = sm.get_preprocessing(MODEL.split("-")[1])
     # dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=get_classes()[0],
     #                   augmentation=get_training_augmentation(),
     #                   preprocessing=get_preprocessing(preprocess_input))
