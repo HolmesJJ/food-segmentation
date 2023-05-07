@@ -14,4 +14,4 @@
 | Dataset | Neural Network | Mean IoU | Mean F1 |
 | :----: | :----: | :----: | :----: |
 | food-seg-103 | [U-Net DenseNet121](https://drive.google.com/file/d/1x5V3QdXmeLrPmv45w9W6ywFc6yDkpNBb/view?usp=share_link) | 28.19% | 28.48% |
-| food-seg-103 | [FCN DenseNet121]() | | |
+| food-seg-103 | [FPN DenseNet121]() | | |

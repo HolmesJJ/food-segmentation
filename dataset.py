@@ -237,7 +237,7 @@ def denormalize(x):
     return x
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if not os.path.isdir(DATASET_PATH):
         convert_jpg_to_png()
         create_dataset()

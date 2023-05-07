@@ -92,7 +92,7 @@ def get_preprocessing(preprocessing_fn):
 
 
 def compile_model():
-    dice_loss = DiceLoss(class_weights=np.append(np.ones(len(get_classes()[0])), 0.2))
+    dice_loss = DiceLoss(class_weights=np.append(np.ones(len(get_classes()[0])), 0.5))  # 0.5 for background
     focal_loss = CategoricalFocalLoss()
     total_loss = dice_loss + (1 * focal_loss)
     iou_score = IOUScore(threshold=0.5)
@@ -180,7 +180,7 @@ def train():
     plt.savefig(FIGURE_PATH)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # show(TRAIN_PATH + "img/00000001.png", TRAIN_PATH + "mask/00000001.png")
     # dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=get_classes()[0])
     # dataset = Dataset(TRAIN_PATH + "img", TRAIN_PATH + "mask", class_values=get_classes()[0],
