@@ -52,6 +52,7 @@ def get_classes():
     # FoodSeg103 Dataset
     ids = categories["id"].to_list()[1:]
     classes = categories["name"].to_list()[1:]
+    classes = [cls.strip() for cls in classes]
     return ids, classes
 
 

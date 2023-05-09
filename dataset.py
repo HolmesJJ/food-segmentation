@@ -196,7 +196,7 @@ def resize(width, height):
             images = glob.glob(f"{DATASET_PATH}{dataset_dir}/tmp/*")
             for image in images:
                 m = cv2.imread(image)
-                m = cv2.resize(m, (width, height))
+                m = cv2.resize(m, (width, height), interpolation=cv2.INTER_NEAREST)
                 cv2.imwrite(f"{DATASET_PATH}{dataset_dir}/{image_type}/{os.path.basename(image)}", m)
             shutil.rmtree(f"{DATASET_PATH}{dataset_dir}/tmp")
 
