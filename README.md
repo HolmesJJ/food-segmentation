@@ -11,7 +11,10 @@
 * [Segmentation Models](https://github.com/qubvel/segmentation_models)
 * [Image Segmentation Keras](https://github.com/divamgupta/image-segmentation-keras)
 
-| Dataset | Neural Network | Mean IoU | Mean F1 |
-| :----: | :----: | :----: | :----: |
-| food-seg-103 | [U-Net DenseNet121](https://drive.google.com/file/d/1x5V3QdXmeLrPmv45w9W6ywFc6yDkpNBb/view?usp=share_link) | 28.19% | 28.48% |
-| food-seg-103 | [FPN DenseNet121]() | | |
+| Dataset | Neural Network | Mean IoU | Mean Pixel F1 | Classification Recall | Classification Precision | Classification F1 |
+| :----: | :----: | :----: | :----: | :----: | :----: | :----: |
+| food-seg-103 | [FPN SEResNet152]() |  |  |  |  |  |
+| food-seg-103 | [U-Net DenseNet201]() |  |  |  |  |  |
+
+## Unresolved Bugs
+* [Iou_score starts very high and keeps on decreasing/multi-class segmentation](https://github.com/qubvel/segmentation_models/issues/458)
