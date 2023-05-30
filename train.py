@@ -37,7 +37,7 @@ VAL_PATH = "dataset/val/"
 TEST_PATH = "dataset/test/"
 
 BATCH_SIZE = 8
-MODEL = "unet-densenet201"
+MODEL = "linknet-efficientnetb3"
 CHECKPOINT_PATH = "checkpoints/" + MODEL + ".h5"
 FIGURE_PATH = "figures/" + MODEL + ".png"
 MODEL_PATH = "models/" + MODEL + ".h5"
@@ -101,8 +101,8 @@ def compile_model():
     strategy = tf.distribute.MirroredStrategy()
     if not os.path.exists(CHECKPOINT_PATH):
         with strategy.scope():
-            model = Unet(MODEL.split("-")[1], classes=len(get_classes()[0]) + 1,
-                         activation="softmax", encoder_weights="imagenet")
+            model = Linknet(MODEL.split("-")[1], classes=len(get_classes()[0]) + 1,
+                            activation="softmax", encoder_weights="imagenet")
             optimizer = Adam(learning_rate=0.00001)
             model.compile(loss=total_loss, optimizer=optimizer, metrics=[iou_score, f1_score])
     else:
@@ -148,17 +148,17 @@ def train():
                         validation_data=val_dataloader,
                         validation_steps=len(val_dataloader))
 
-    train_score = model.evaluate_generator(train_dataloader)
+    train_score = model.evaluate(train_dataloader)
     print("Train Loss: ", train_score[0])
     print("Train Mean IoU: ", train_score[1])
     print("Train Mean F1: ", train_score[2])
 
-    val_score = model.evaluate_generator(val_dataloader)
+    val_score = model.evaluate(val_dataloader)
     print("Validation Loss: ", val_score[0])
     print("Validation Mean IoU: ", val_score[1])
     print("Validation Mean F1: ", val_score[2])
 
-    test_score = model.evaluate_generator(test_dataloader)
+    test_score = model.evaluate(test_dataloader)
     print("Test Loss: ", test_score[0])
     print("Test Mean IoU: ", test_score[1])
     print("Test Mean F1: ", test_score[2])
