@@ -13,6 +13,6 @@ mlruns/
 
 # data
 FoodSeg103*.zip
-FoodSeg103/
+FoodSeg103*/
 dataset*.zip
-dataset/
+dataset*/
